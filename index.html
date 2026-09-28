@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>東京駅 3D乗換ナビ</title>
+<meta name="description" content="東京駅のJR在来線・新幹線・総武地下ホーム・京葉線・丸ノ内線のホームと改札を3D模型で表示。乗換ルート、乗り継ぎに間に合うかの判定、全路線の乗換時間表を、雨・ラッシュ・荷物などの条件つきで案内します。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tokyo-3d.napoblog.com/">
+<meta property="og:title" content="東京駅 3D乗換ナビ">
+<meta property="og:description" content="東京駅のJR在来線・新幹線・総武地下ホーム・京葉線・丸ノ内線のホームと改札を3D模型で表示。乗換ルート、乗り継ぎに間に合うかの判定、全路線の乗換時間表を、雨・ラッシュ・荷物などの条件つきで案内します。">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0c1116">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230c1116'/%3E%3Crect x='14' y='38' width='36' height='6' rx='1' fill='%23f5c400'/%3E%3Crect x='18' y='26' width='28' height='6' rx='1' fill='%23F15A22'/%3E%3Crect x='22' y='14' width='20' height='6' rx='1' fill='%23C9242F'/%3E%3C/svg%3E">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);box-sizing:border-box;background:#0c1116}[hidden]{display:none!important}img{max-width:100%}</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap">
+<style>
+/* 夜の駅構内をイメージした単一ダークテーマ(意図的に固定) */
+:root{
+  color-scheme:dark;
+  --bg:#0c1116;
+  --panel:rgba(16,22,29,.94);
+  --panel-2:#18212b;
+  --rule:#26313d;
+  --text:#e8edf2;
+  --muted:#8f9cab;
+  --sign:#f5c400;
+  --sign-ink:#1b1600;
+  --ok:#3fbf7f;
+  --warn:#f5a623;
+  --bad:#e5484d;
+  --focus:#7cc4ff;
+  --ui:"BIZ UDPGothic","Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic",Meiryo,sans-serif;
+  --num:"Barlow Semi Condensed","Arial Narrow","BIZ UDPGothic",sans-serif;
+}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--ui);overflow:hidden;font-size:14px}
+#app{position:relative;height:100%;overflow:hidden}
+#scene{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#scene:active{cursor:grabbing}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+
+/* 3D上のラベル */
+.tag{position:absolute;left:0;top:0;white-space:nowrap;will-change:transform;font-size:11px;line-height:1;display:flex;align-items:center;gap:4px;padding:4px 6px;border-radius:3px;background:rgba(12,17,22,.86);border:1px solid #2c3845;color:var(--text)}
+.tag i{display:block;width:8px;height:8px;border-radius:1px}
+.tag b{font-family:var(--num);font-weight:700;font-size:13px;letter-spacing:.02em}
+.tag.plat{pointer-events:auto;cursor:pointer}
+.tag.plat:hover{border-color:var(--sign)}
+.tag.gate{font-size:10px;color:#c5ced8;background:rgba(12,17,22,.7);border-color:#233040;padding:3px 5px}
+.tag.exit{background:var(--sign);color:var(--sign-ink);border-color:var(--sign);font-weight:700}
+.tag.place{background:none;border:none;color:var(--muted);font-size:10.5px;letter-spacing:.04em}
+.tag.bldg{background:none;border:none;color:#5d6b7a;font-size:10px}
+.tag.floor{background:none;border:none;border-left:2px solid #3a4756;border-radius:0;font-family:var(--num);font-weight:600;font-size:14px;color:#6f7d8c;padding:2px 6px}
+.tag.hot{border-color:var(--sign);box-shadow:0 0 0 1px var(--sign)}
+.tag.pin{background:#fff;color:#111;border-color:#fff;font-weight:700;font-size:12px}
+.tag.pin.goal{background:var(--sign);border-color:var(--sign);color:var(--sign-ink)}
+.tag.rain{background:#1c3a5c;border-color:#3b76b0;color:#cfe4ff;font-size:10px}
+.tag.belt{background:#1d3b31;border-color:#3f8f72;color:#c9f0df;font-size:10px}
+.hide-gates .tag.gate{display:none}
+
+/* パネル */
+.panel{position:absolute;left:16px;top:16px;width:min(384px,calc(100% - 32px));max-height:calc(100% - 32px);overflow:auto;background:var(--panel);border:1px solid var(--rule);border-radius:8px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:flex;flex-direction:column}
+.panel.wide{width:min(540px,calc(100% - 32px))}
+.head{padding:14px 16px 0;display:flex;flex-direction:column;gap:8px;position:relative}
+.linebar{display:flex;gap:3px}
+.linebar span{flex:1;height:4px;border-radius:1px}
+.eyebrow{font-family:var(--num);font-weight:600;font-size:11px;letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
+h1{margin:0;font-size:20px;font-weight:700;letter-spacing:.02em;text-wrap:balance}
+.minbtn{display:none;position:absolute;right:10px;top:10px}
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--rule);margin-top:4px}
+.tabs button{flex:1;background:none;border:none;border-bottom:2px solid transparent;padding:10px 4px 9px;font-size:12.5px;color:var(--muted);cursor:pointer}
+.tabs button[aria-selected="true"]{color:var(--text);border-bottom-color:var(--sign);font-weight:700}
+.body{padding:14px 16px 16px;display:flex;flex-direction:column;gap:14px}
+.od{display:grid;grid-template-columns:auto 1fr;column-gap:10px;row-gap:8px;align-items:center}
+.od label{font-size:11px;color:var(--muted);letter-spacing:.06em;display:flex;align-items:center;gap:6px}
+.dot{width:10px;height:10px;border-radius:50%;background:#fff;display:inline-block}
+.dot.g{background:var(--sign);border-radius:1px;transform:rotate(45deg)}
+select,button,input{font:inherit;color:var(--text)}
+select{width:100%;min-width:0;background:var(--panel-2);border:1px solid var(--rule);border-radius:5px;padding:9px 30px 9px 10px;font-size:13.5px;appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 15px) 55%,calc(100% - 10px) 55%;background-size:5px 5px;background-repeat:no-repeat}
+select:hover{border-color:#3a4a5b}
+input[type=time]{background:var(--panel-2);border:1px solid var(--rule);border-radius:5px;padding:8px 10px;font-family:var(--num);font-size:18px;font-weight:600;width:100%;min-width:0;font-variant-numeric:tabular-nums}
+.swap{justify-self:end;background:none;border:1px solid var(--rule);border-radius:5px;padding:4px 10px;font-size:12px;color:var(--muted);cursor:pointer}
+.swap:hover{color:var(--text);border-color:#3a4a5b}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.cond{display:flex;flex-direction:column;gap:8px}
+.cond .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:4px;overflow:hidden}
+.seg button{background:var(--panel-2);border:none;border-right:1px solid var(--rule);padding:5px 9px;font-size:12px;color:#cfd7df;cursor:pointer}
+.seg button:last-child{border-right:none}
+.seg button[aria-pressed="true"]{background:#e8edf2;color:#0c1116}
+.result{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--rule);padding-top:14px}
+.time{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.time .n{font-family:var(--num);font-weight:700;font-size:44px;line-height:.9;color:var(--sign);font-variant-numeric:tabular-nums}
+.time .u{font-size:14px;font-weight:700}
+.time .pre{font-size:12px;color:var(--muted)}
+.time .diff{font-size:11.5px;color:#cfd7df;border:1px solid #3a4a5b;border-radius:3px;padding:2px 6px;margin-left:auto}
+.facts{display:flex;flex-wrap:wrap;gap:6px}
+.facts span{font-size:11.5px;color:#c9d2db;background:var(--panel-2);border:1px solid var(--rule);border-radius:3px;padding:3px 7px;font-variant-numeric:tabular-nums}
+.pos{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;background:var(--panel-2);border:1px solid var(--rule);border-radius:5px;padding:9px 11px;font-size:12.5px;line-height:1.5}
+.pos dt{color:var(--muted);font-size:11px;padding-top:2px}
+.pos dd{margin:0}
+.pos dd b{color:var(--sign)}
+.playrow{display:flex;gap:8px;align-items:center}
+.btn{background:var(--sign);color:var(--sign-ink);border:none;border-radius:5px;padding:7px 12px;font-size:12.5px;font-weight:700;cursor:pointer}
+.btn.ghost{background:none;border:1px solid var(--rule);color:#cfd7df;font-weight:400}
+.btn:disabled{opacity:.4;cursor:default}
+ol.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;counter-reset:s}
+ol.steps li{display:grid;grid-template-columns:20px 44px 1fr;gap:8px;align-items:start;padding:7px 4px;border-bottom:1px dashed #222c37;font-size:13px;line-height:1.5;border-radius:4px}
+ol.steps li:last-child{border-bottom:none}
+ol.steps li::before{counter-increment:s;content:counter(s);font-family:var(--num);font-weight:700;color:var(--muted);font-size:13px;line-height:1.55;text-align:right}
+ol.steps li.cur{background:#2a2508}
+ol.steps .fl{font-family:var(--num);font-weight:600;font-size:12px;text-align:center;border:1px solid #33414f;border-radius:3px;padding:1px 0;color:#c9d2db;font-variant-numeric:tabular-nums;margin-top:1px}
+ol.steps li.gate .fl{border-color:#6b7a8a}
+ol.steps li.goal .fl{background:var(--sign);color:var(--sign-ink);border-color:var(--sign)}
+ol.steps li.start .fl{background:#fff;color:#111;border-color:#fff}
+ol.steps .tip{display:block;font-size:11.5px;color:var(--muted);margin-top:2px}
+ol.steps .tip::before{content:"目印 ";color:#b9a24a;font-weight:700}
+ol.steps .out{display:inline-block;font-size:10.5px;color:#cfe4ff;background:#1c3a5c;border-radius:2px;padding:0 4px;margin-left:4px;vertical-align:1px}
+ol.steps .out.belt{color:#c9f0df;background:#1d3b31}
+.ctl{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--rule);padding-top:14px}
+.ctl h2,.sec h2{margin:0;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.1em}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--panel-2);border:1px solid var(--rule);border-radius:4px;padding:5px 9px;font-size:12px;cursor:pointer;color:#cfd7df}
+.chip:hover{border-color:#3a4a5b}
+.chip[aria-pressed="true"]{background:#e8edf2;color:#0c1116;border-color:#e8edf2}
+details.legend summary{cursor:pointer;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.1em}
+.lg{display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;margin-top:8px}
+.lg div{display:flex;align-items:center;gap:6px;font-size:11.5px;color:#c9d2db}
+.lg i{width:12px;height:12px;border-radius:2px;flex:none}
+.note{font-size:11px;color:var(--muted);line-height:1.6;margin:0}
+.sec{display:flex;flex-direction:column;gap:10px}
+.lead{font-size:12.5px;line-height:1.65;color:#c9d2db;margin:0}
+.tt{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tt label{display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--muted)}
+.verdict{border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;border:1px solid var(--rule);background:var(--panel-2)}
+.verdict .pill{align-self:flex-start;font-weight:700;font-size:13px;border-radius:3px;padding:3px 9px}
+.verdict.ok .pill{background:var(--ok);color:#06200f}
+.verdict.warn .pill{background:var(--warn);color:#2a1700}
+.verdict.bad .pill{background:var(--bad);color:#fff}
+.verdict .big{font-family:var(--num);font-weight:700;font-size:30px;font-variant-numeric:tabular-nums}
+.verdict p{margin:0;font-size:12.5px;line-height:1.6;color:#c9d2db}
+.bar{position:relative;height:18px;border-radius:3px;background:#0f151b;border:1px solid var(--rule);overflow:hidden;display:flex}
+.bar span{display:block;height:100%}
+.barlg{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--muted)}
+.barlg i{display:inline-block;width:9px;height:9px;border-radius:1px;margin-right:4px;vertical-align:-1px}
+.mx-wrap{overflow-x:auto}
+table.mx{border-collapse:separate;border-spacing:2px;font-variant-numeric:tabular-nums;margin:0 auto}
+table.mx th{font-weight:400;font-size:10.5px;color:#aeb9c5;white-space:nowrap}
+table.mx thead th{writing-mode:vertical-rl;text-orientation:upright;letter-spacing:-.08em;padding:2px 0 4px;height:124px;vertical-align:bottom;font-size:10px;line-height:1.1}
+table.mx thead th span,table.mx tbody th span{display:inline-block;width:8px;height:8px;border-radius:1px;margin:0 0 3px}
+table.mx tbody th{text-align:right;padding-right:4px}
+table.mx tbody th span{margin:0 4px 0 0}
+table.mx td{width:26px;height:24px;text-align:center;font-family:var(--num);font-weight:600;font-size:12.5px;border-radius:2px;cursor:pointer;padding:0}
+table.mx td.self{background:none;color:#3a4756;cursor:default}
+table.mx td:hover:not(.self){outline:2px solid var(--sign)}
+table.mx td.sel{outline:2px solid #fff}
+.scale{display:flex;gap:2px;align-items:center;font-size:10.5px;color:var(--muted)}
+.scale span{width:26px;height:12px;border-radius:2px}
+.rank{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.rank li{display:flex;gap:8px;font-size:12px;align-items:baseline}
+.rank li b{font-family:var(--num);font-size:15px;color:var(--sign);min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
+.rank li button{background:none;border:none;padding:0;color:#dfe6ec;text-align:left;cursor:pointer;font-size:12px;text-decoration:underline;text-decoration-color:#3a4a5b;text-underline-offset:3px}
+
+/* 右上の方位・操作ヒント */
+.compass{position:absolute;right:16px;top:16px;width:46px;height:46px;border-radius:50%;border:1px solid var(--rule);background:var(--panel);display:grid;place-items:center}
+.compass .nd{width:100%;height:100%;position:relative}
+.compass .nd::before{content:"";position:absolute;left:50%;top:6px;transform:translateX(-50%);border:6px solid transparent;border-bottom:14px solid #e2463b;border-top:0}
+.compass .nd::after{content:"N";position:absolute;left:50%;bottom:5px;transform:translateX(-50%);font-family:var(--num);font-weight:700;font-size:11px;color:var(--muted)}
+.hint{position:absolute;right:16px;bottom:16px;font-size:11px;color:var(--muted);background:var(--panel);border:1px solid var(--rule);border-radius:5px;padding:6px 10px;line-height:1.6}
+.err{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:13px;padding-inline:16px;text-align:center}
+
+@media (max-width:760px){
+  .panel,.panel.wide{top:auto;bottom:16px;max-height:56%}
+  .minbtn{display:inline-block}
+  .panel.min .tabs,.panel.min .body > :not(.keep){display:none}
+  .panel.min ol.steps,.panel.min .pos,.panel.min .playrow{display:none}
+  .hint{display:none}
+  .head{padding:10px 14px 0}
+  h1{font-size:17px}
+  .body{padding:12px 14px 14px;gap:12px}
+  .time .n{font-size:36px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <canvas id="scene" aria-label="東京駅の3D構内模型。ドラッグで回転できます"></canvas>
+  <div id="labels"></div>
+
+  <div class="compass" aria-hidden="true"><div class="nd" id="needle"></div></div>
+  <div class="hint">ドラッグで回転 · ホイールでズーム · 右ドラッグで移動<br>ホームの番号札をクリックすると到着地に設定</div>
+
+  <section class="panel" id="panel" aria-label="乗換案内">
+    <header class="head">
+      <div class="linebar" id="linebar" aria-hidden="true"></div>
+      <div class="eyebrow">Tokyo Sta. · 3D Transfer</div>
+      <h1>東京駅 3D乗換ナビ</h1>
+      <button class="swap minbtn" id="minbtn" aria-expanded="true">たたむ</button>
+      <div class="tabs" role="tablist">
+        <button role="tab" id="t-route" aria-selected="true" aria-controls="p-route">ルート</button>
+        <button role="tab" id="t-check" aria-selected="false" aria-controls="p-check">乗り継ぎ判定</button>
+        <button role="tab" id="t-mx" aria-selected="false" aria-controls="p-mx">乗換時間表</button>
+      </div>
+    </header>
+
+    <div class="body">
+      <div class="od keep">
+        <label for="from"><span class="dot"></span>出発</label>
+        <select id="from"></select>
+        <label for="to"><span class="dot g"></span>到着</label>
+        <select id="to"></select>
+        <span></span>
+        <button class="swap" id="swap" type="button">⇅ 出発と到着を入れ替える</button>
+      </div>
+
+      <div class="cond">
+        <div class="row">
+          <span class="note">歩く速さ</span>
+          <div class="seg" id="speed">
+            <button data-v="58" aria-pressed="false">ゆっくり</button>
+            <button data-v="75" aria-pressed="true">ふつう</button>
+            <button data-v="92" aria-pressed="false">急ぎ</button>
+          </div>
+        </div>
+        <div class="chips">
+          <button class="chip" id="c-rush" aria-pressed="false">朝夕ラッシュ</button>
+          <button class="chip" id="c-rain" aria-pressed="false">雨の日(屋外を避ける)</button>
+          <button class="chip" id="c-flat" aria-pressed="false">上下移動を少なく(荷物・ベビーカー)</button>
+        </div>
+      </div>
+
+      <!-- ルート -->
+      <div id="p-route" role="tabpanel" aria-labelledby="t-route" class="sec keep">
+        <div class="result" aria-live="polite">
+          <div class="time"><span class="pre">徒歩</span><span class="pre">約</span><span class="n" id="tmin">–</span><span class="u">分</span><span class="diff" id="tdiff" hidden></span></div>
+          <div class="facts" id="facts"></div>
+          <dl class="pos" id="pos" hidden></dl>
+          <div class="playrow">
+            <button class="btn" id="play" type="button">▶ ルートを再生</button>
+            <span class="note">カメラが経路をたどり、今いる手順を強調します</span>
+          </div>
+          <ol class="steps" id="steps"></ol>
+        </div>
+      </div>
+
+      <!-- 乗り継ぎ判定 -->
+      <div id="p-check" role="tabpanel" aria-labelledby="t-check" class="sec" hidden>
+        <p class="lead">乗ってくる列車の到着時刻と、乗り継ぎたい列車の発車時刻を入れると、上で選んだ出発・到着と条件で間に合うかを判定します。</p>
+        <div class="tt">
+          <label for="arr">東京に着く時刻<input type="time" id="arr" value="10:12"></label>
+          <label for="dep">乗り継ぐ列車の発車<input type="time" id="dep" value="10:31"></label>
+        </div>
+        <div class="verdict" id="verdict"></div>
+        <div class="bar" id="bar" aria-hidden="true"></div>
+        <div class="barlg">
+          <span><i style="background:#6b7a8a"></i>降車・ホームを出るまで</span>
+          <span><i style="background:#f5c400"></i>歩く時間</span>
+          <span><i style="background:#3fbf7f"></i>余裕</span>
+          <span><i style="background:#e5484d"></i>不足</span>
+        </div>
+        <p class="note">降車してホームの階段にたどり着くまでを1分、ラッシュ時は2分として計算しています。発車1分前にはホームに着いている想定です。</p>
+      </div>
+
+      <!-- 乗換時間表 -->
+      <div id="p-mx" role="tabpanel" aria-labelledby="t-mx" class="sec" hidden>
+        <p class="lead">東京駅の全路線どうしの乗換時間の目安です。いまの条件(歩く速さ・ラッシュ・雨・上下移動)で計算し直します。マスを押すとそのルートを3Dで表示します。</p>
+        <div class="mx-wrap"><table class="mx" id="mx"></table></div>
+        <div class="scale" id="scale"></div>
+        <h2>乗換に時間がかかる組み合わせ</h2>
+        <ol class="rank" id="rank"></ol>
+      </div>
+
+      <div class="ctl">
+        <h2>フロア表示</h2>
+        <div class="chips" id="floors">
+          <button class="chip" data-f="all" aria-pressed="true">すべて</button>
+          <button class="chip" data-f="up" aria-pressed="false">2F・3F (ホーム)</button>
+          <button class="chip" data-f="g" aria-pressed="false">1F (コンコース)</button>
+          <button class="chip" data-f="b1" aria-pressed="false">B1F</button>
+          <button class="chip" data-f="deep" aria-pressed="false">B2F以下 (総武・京葉・地下鉄)</button>
+        </div>
+        <h2>視点</h2>
+        <div class="chips" id="views">
+          <button class="chip" data-v="route">ルートに寄る</button>
+          <button class="chip" data-v="overview">全体</button>
+          <button class="chip" data-v="top">真上から</button>
+          <button class="chip" data-v="under">地下から見上げる</button>
+          <button class="chip" id="gatechip" aria-pressed="true">改札名</button>
+        </div>
+      </div>
+
+      <details class="legend">
+        <summary>路線カラー</summary>
+        <div class="lg" id="legend"></div>
+      </details>
+
+      <p class="note">駅構内を簡略化した模式図です。のりば番号・ホームの階・改札名はJR東日本・東京メトロの案内とWikipediaをもとにしていますが、通路の形や位置、大手町駅(東西線)の深さ、所要時間はおおよその目安で、実際とは異なります。京葉線ホームは在来線から約500m南にあり、乗換に10分以上かかることがあります。工事で通路が変わることもあるので、現地では駅の案内表示に従ってください。</p>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+if(!window.THREE || !THREE.OrbitControls){
+  document.getElementById('app').insertAdjacentHTML('beforeend','<div class="err">3D表示ライブラリを読み込めませんでした。ページを再読み込みしてください。</div>');
+  return;
+}
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- 基本定義 ---------- */
+// 階 → 表示上の高さ(上下方向は誇張)
+const FY={3:7,2:3.5,1:0,'-1':-3.5,'-2':-7,'-3':-10.5,'-4':-14,'-5':-17.5};
+const fy=f=>FY[f];
+const fidx=f=>f>0?f-1:f;
+const fl=f=>f>0?`${f}F`:`B${-f}F`;
+
+const C={chuo:'#F15A22',keihin:'#00B2E5',yamanote:'#9ACD32',tokaido:'#F68B1E',yokosuka:'#2F5DB8',keiyo:'#C9242F',
+  tohoku:'#41A845',tokaidoS:'#7C9CCB',maru:'#F62E36',tozai:'#009BBF'};
+const ZONE_NAME={jr:'JR在来線',je:'JR東日本の新幹線',jc:'東海道新幹線',m:'丸ノ内線',tz:'東西線',pub:'改札外'};
+// 新幹線はJRの乗車券で在来線の改札内も通れる(在来線改札から入って新幹線のりかえ口を通るのがふつう)
+const ZEXT={je:['jr'],jc:['jr']};
+
+/* ---------- 構内ネットワーク(1単位 ≒ 10m、x=東/八重洲側、z=南/有楽町側) ---------- */
+const N={}; const E=[];
+function node(id,x,z,f,zone,label='',kind='cc',show=false,tip=''){N[id]={id,x,z,f,zone,label,kind,show,tip};return N[id];}
+function edge(a,b,type='walk',out=false){E.push({a,b,type,out});}
+function chain(ids){const s=ids.slice().sort((p,q)=>N[p].x-N[q].x);for(let i=1;i<s.length;i++)edge(s[i-1],s[i]);}
+const stopInfo={}; // 停車位置の説明用
+function stop(pid,sfx,x,z,info,to){const p=N[pid],id=pid+'_'+sfx;node(id,x,z,p.f,p.zone,'','stop');edge(pid,id,'plat');stopInfo[id]=info;if(to)edge(id,to);return id;}
+
+// 在来線ホーム(丸の内側 → 八重洲側)。1・2番線(中央線)だけ一段高い3F
+const JR=[
+ {id:'jr12', x:-12,f:3,n:'1・2', c:[C.chuo,C.chuo],z0:-16,z1:16},
+ {id:'jr34', x:-8, f:2,n:'3・4', c:[C.keihin,C.yamanote]},
+ {id:'jr56', x:-4, f:2,n:'5・6', c:[C.yamanote,C.keihin]},
+ {id:'jr78', x:0,  f:2,n:'7・8', c:[C.tokaido,C.tokaido]},
+ {id:'jr910',x:4,  f:2,n:'9・10',c:[C.tokaido,C.tokaido]},
+];
+// 新幹線ホーム(20〜23番線はJR東日本、14〜19番線はJR東海)
+const SK=[
+ {id:'je2021',x:8.5, n:'20・21',zone:'je',c:[C.tohoku,C.tohoku]},
+ {id:'je2223',x:12,  n:'22・23',zone:'je',c:[C.tohoku,C.tohoku]},
+ {id:'jc1415',x:16,  n:'14・15',zone:'jc',c:[C.tokaidoS,C.tokaidoS]},
+ {id:'jc1617',x:19.5,n:'16・17',zone:'jc',c:[C.tokaidoS,C.tokaidoS]},
+ {id:'jc1819',x:23,  n:'18・19',zone:'jc',c:[C.tokaidoS,C.tokaidoS]},
+];
+
+// 1F 改札内の3本の通路(北通路・中央通路・南通路)。丸の内側と八重洲側の改札を結ぶ
+node('gMN',-16,-13,1,'jr','JR 丸の内北口','gate',true,'赤レンガ駅舎の北ドームの下');
+node('gMC',-16,  0,1,'jr','JR 丸の内中央口','gate',true,'出た正面が皇居へ続く行幸通り');
+node('gMS',-16, 13,1,'jr','JR 丸の内南口','gate',true,'赤レンガ駅舎の南ドームの下');
+node('gYN', 26,-13,1,'jr','JR 八重洲北口','gate',true,'大丸東京の近く');
+node('gYC', 26,  0,1,'jr','JR 八重洲中央口','gate',true,'白い大屋根「グランルーフ」の下に出る');
+node('gYS', 26, 13,1,'jr','JR 八重洲南口','gate',true,'高速バスのりばが近い');
+const ROWS=[['N',-13,'北通路','gMN','gYN'],['C',0,'中央通路','gMC','gYC'],['S',13,'南通路','gMS','gYS']];
+const ROWX=[...JR.map(p=>p.x),10.25,14.5,20];
+ROWS.forEach(([k,z,lab,g1,g2])=>{
+  const ids=[g1,g2];
+  ROWX.forEach((x,i)=>{node(`r${k}${i}`,x,z,1,'jr',lab);ids.push(`r${k}${i}`);});
+  chain(ids);
+});
+N.rN2.show=N.rC2.show=N.rS2.show=true;
+N.rC2.tip='改札内のメイン通路。各ホームへの階段が並ぶ';
+
+JR.forEach((p,i)=>{
+  p.z0=p.z0??-22; p.z1=p.z1??22;
+  node(p.id,p.x,(p.z0+p.z1)/2,p.f,'jr',`${p.n}番線ホーム`,'plat');
+  stop(p.id,'n',p.x,-10,'北寄り(神田方面)','rN'+i);
+  stop(p.id,'c',p.x,2.5,'中ほど','rC'+i);
+  stop(p.id,'s',p.x,10,'南寄り(有楽町方面)','rS'+i);
+});
+
+// B1F 改札内(丸の内地下・グランスタ東京)
+node('bMN',-13,-10,-1,'jr','丸の内地下コンコース');
+node('bMC',-13,  0,-1,'jr','丸の内地下コンコース','cc',true,'横須賀線・総武快速線への長いエスカレーターがある');
+node('bMS',-13, 10,-1,'jr','丸の内地下コンコース');
+node('bG1', -4,  1,-1,'jr','グランスタ東京','cc',true,'改札内の商業エリア。お土産を買う人で混みやすい');
+node('bG2',  6,  1,-1,'jr','グランスタ東京');
+node('bG3', 18,  1,-1,'jr','グランスタ東京');
+node('bS',   4, 16,-1,'jr','京葉線への連絡通路','cc',true,'「京葉線」の案内に沿って南へ進む');
+node('gMBN',-17,-10,-1,'jr','JR 丸の内地下北口','gate',true);
+node('gMBC',-17,  0,-1,'jr','JR 丸の内地下中央口','gate',true,'出て正面が丸ノ内線の中央改札');
+node('gMBS',-17, 10,-1,'jr','JR 丸の内地下南口','gate',true);
+node('gYB',  26,  1,-1,'jr','JR 八重洲地下中央口','gate',true,'出ると八重洲地下街');
+[['gMBN','bMN'],['bMN','bMC'],['gMBC','bMC'],['bMC','bMS'],['gMBS','bMS'],['bMC','bG1'],['bG1','bG2'],['bG2','bG3'],['bG3','gYB'],['bMS','bS'],['bG2','bS'],
+ ['rN0','bMN'],['rS0','bMS'],['rC2','bG1'],['rC4','bG2'],['rS4','bS'],['rC6','bG3']].forEach(([a,b])=>edge(a,b));
+
+// 横須賀線・総武快速線(総武地下ホーム、B5F)。丸の内駅前広場の地下深く
+node('sobu',-23,0,-5,'jr','総武地下1〜4番線ホーム','plat');
+stop('sobu','n',-23,-9,'北寄り(千葉方面の端)','bMN');
+stop('sobu','c',-23,0.5,'中ほど','bMC');
+stop('sobu','s',-23,9,'南寄り(品川・横須賀方面)','bMS');
+
+// 京葉線(京葉地下ホーム、B4F)。在来線から約500m南。動く歩道のある「ベイロード」でつながる
+node('bay1',3,24,-1,'jr','ベイロード(動く歩道)','cc',true,'動く歩道が続く長い通路。歩かない人は片側に寄る');
+node('bay2',2,37,-1,'jr','ベイロード(動く歩道)');
+node('bay3',1,50,-1,'jr','');
+node('kc',   0,57,-1,'jr','京葉線 改札内コンコース');
+node('kcW', -9,57,-1,'jr','京葉線 改札内コンコース');
+node('gKM',-15,57,-1,'jr','JR 京葉地下丸の内口','gate',true,'東京国際フォーラム・有楽町方面に出る');
+node('gKY',  9,57,-1,'jr','JR 京葉地下八重洲口','gate',true);
+edge('bS','bay1'); edge('bay1','bay2','belt'); edge('bay2','bay3','belt'); edge('bay3','kc');
+chain(['gKM','kcW','kc','gKY']);
+node('keiyo',-3,64,-4,'jr','京葉地下1〜4番線ホーム','plat');
+stop('keiyo','w',-10,64,'西寄り(有楽町側)','kcW');
+stop('keiyo','e',4,64,'東寄り(八重洲側)','kc');
+
+// 新幹線
+SK.forEach(p=>{
+  node(p.id,p.x,-2,2,p.zone,`${p.n}番線ホーム(新幹線)`,'plat');
+});
+// JR東日本の新幹線(東北・上越・北陸など)
+node('jeA',10.25,-6,1,'je','新幹線コンコース(東北・上越・北陸)');
+node('jeB',10.25, 6,1,'je','新幹線コンコース(東北・上越・北陸)');
+node('jeN',10.25,-21,1,'je','新幹線コンコース(東北・上越・北陸)');
+node('jeGN',10.25,-10,1,'je','東北・上越・北陸新幹線 北のりかえ口','gate',true);
+node('jeGC',10.25,-3,1,'je','東北・上越・北陸新幹線 中央のりかえ口','gate',true);
+node('jeGS',10.25,10,1,'je','東北・上越・北陸新幹線 南のりかえ口','gate',true);
+node('jeNB',15,-25,1,'je','JR 日本橋口','gate',true,'東北・上越・北陸新幹線のりばに近い改札');
+[['rN5','jeGN'],['jeGN','jeA'],['rC5','jeGC'],['jeGC','jeA'],['jeA','jeB'],['rS5','jeGS'],['jeGS','jeB'],['jeA','jeN'],['jeN','jeNB']].forEach(([a,b])=>edge(a,b));
+['je2021','je2223'].forEach(id=>{const x=N[id].x;
+  stop(id,'n',x,-20,'北寄り(日本橋口側)','jeN');
+  stop(id,'c',x,-8,'中ほどより北','jeA');
+  stop(id,'s',x,8,'中ほどより南','jeB');
+});
+// 東海道新幹線(JR東海)
+const jcA=[],jcB=[];
+['jc1415','jc1617','jc1819'].forEach((id,i)=>{const x=N[id].x;
+  node('jcA'+i,x,-6,1,'jc','東海道新幹線 コンコース'); jcA.push('jcA'+i);
+  node('jcB'+i,x, 6,1,'jc','東海道新幹線 コンコース'); jcB.push('jcB'+i);
+  stop(id,'n',x,-8,'中ほどより北(東京方の先頭寄り)','jcA'+i);
+  stop(id,'s',x,8,'中ほどより南','jcB'+i);
+});
+chain(jcA); chain(jcB);
+node('jcGN',14.5,-10,1,'jc','東海道新幹線 北乗換口','gate',true);
+node('jcGC',14.5,-3,1,'jc','東海道新幹線 中央乗換口','gate',true);
+node('jcGS',14.5,10,1,'jc','東海道新幹線 南乗換口','gate',true);
+node('jcYN',26,-7,1,'jc','東海道新幹線 八重洲北口','gate',true);
+node('jcYC',26, 4,1,'jc','東海道新幹線 八重洲中央口','gate',true);
+node('jcYS',26, 9,1,'jc','東海道新幹線 八重洲南口','gate',true);
+[['rN6','jcGN'],['jcGN','jcA0'],['rC6','jcGC'],['jcGC','jcA0'],['jcGC','jcB0'],['rS6','jcGS'],['jcGS','jcB0'],
+ ['jcA2','jcYN'],['jcB2','jcYC'],['jcB2','jcYS']].forEach(([a,b])=>edge(a,b));
+
+// 丸ノ内線(ホームB2F・改札B1F)
+node('m',-28,-2,-2,'m','丸ノ内線 ホーム','plat');
+node('mGN',-25,-11,-1,'m','丸ノ内線 北改札','gate',true);
+node('mGC',-25,  2,-1,'m','丸ノ内線 中央改札','gate',true,'JR丸の内地下中央口の目の前');
+stop('m','n',-28,-9,'北寄り(大手町方面)','mGN');
+stop('m','c',-28,1,'中ほど(中央改札側)','mGC');
+// 東西線(大手町駅)。東京駅とは地下通路で連絡
+node('tz',-26,-44,-3,'tz','東西線 大手町駅 ホーム','plat');
+node('tzG',-22,-39,-1,'tz','東西線 大手町駅 改札','gate',true,'東京駅とは別の駅。地下通路でつながっている');
+stop('tz','e',-20,-44,'東寄り(日本橋方面)','tzG');
+
+// 改札外(公共通路・出口)
+node('pMN',-20,-13,1,'pub','丸の内北口','exit',true);
+node('pMC',-20,  0,1,'pub','丸の内中央口','exit',true);
+node('pMS',-20, 13,1,'pub','丸の内南口','exit',true);
+node('pF0',-16,-19,1,'pub','北自由通路','pub',true,'改札の外で丸の内側と八重洲側を行き来できる通路');
+node('pF1',  5,-19,1,'pub','北自由通路');
+node('pF2', 26,-19,1,'pub','北自由通路');
+node('pNB', 19,-28,1,'pub','日本橋口','exit',true);
+node('pYN', 30,-13,1,'pub','八重洲北口','exit',true);
+node('pYC', 30,  0,1,'pub','八重洲中央口','exit',true);
+node('pYS', 30, 13,1,'pub','八重洲南口','exit',true);
+node('pBus',33, 19,1,'pub','高速バスのりば','exit',true,'八重洲南口の前。JRバスなどの乗り場');
+node('pYB', 30,  1,-1,'pub','八重洲地下街','exit',true,'地下街。東京ミッドタウン八重洲へもつながる');
+node('pMBN',-21,-11,-1,'pub','丸の内地下北口の前');
+node('pMB', -21,  1,-1,'pub','丸の内地下広場','pub',true,'改札外の地下通路。丸ノ内線・丸ビル・行幸地下通路へ分かれる');
+node('pMBS',-21, 11,-1,'pub','丸の内地下南口の前');
+node('pGyo',-34, -3,-1,'pub','行幸地下通路','exit',true,'丸の内のオフィス街・皇居方面へ雨に濡れずに行ける');
+node('pOte1',-24,-23,-1,'pub','大手町方面 地下通路','pub',true,'「大手町駅」の案内に従って北へ進む');
+node('pOte2',-25,-33,-1,'pub','');
+node('pKT', -22, 30,-1,'pub','KITTE 地下','pub',true,'KITTEの地下1階を抜けると京葉線の丸の内口へ近い');
+node('pKM', -19, 57,-1,'pub','東京国際フォーラム方面','exit',true);
+node('pKY',  13, 57,-1,'pub','鍛冶橋方面');
+node('pSo1',-16, 21,1,'pub','');
+node('pSo2', 22, 21,1,'pub','高架下の道(駅の南側)','pub',false,'屋根のない道を歩く');
+
+// 改札外のつながり(第3要素 true = 屋外)
+[['pMN','gMN'],['pMC','gMC'],['pMS','gMS'],['pMN','pMC',true],['pMC','pMS',true],
+ ['pMN','pF0'],['pF0','pF1'],['pF1','pF2'],['pF2','pYN'],['pF2','pNB'],['pNB','jeNB'],
+ ['pYN','gYN'],['pYC','gYC'],['pYS','gYS'],['pYN','pYC'],['pYC','pYS'],['pYS','pBus'],['pYC','pYB'],['pYB','gYB'],
+ ['pYN','jcYN'],['pYC','jcYC'],['pYS','jcYS'],
+ ['pMBN','gMBN'],['pMB','gMBC'],['pMBS','gMBS'],['pMBN','pMB'],['pMB','pMBS'],['pMB','mGC'],['pMBN','mGN'],['pMB','pGyo'],
+ ['pMB','pMC'],['pMBN','pMN'],['pMBS','pMS'],
+ ['pMBN','pOte1'],['pOte1','pOte2'],['pOte2','tzG'],
+ ['pMBS','pKT'],['pKT','pKM'],['pKM','gKM'],['gKY','pKY'],
+ ['pMS','pSo1',true],['pSo1','pSo2',true],['pSo2','pYS',true],['pSo1','pKM',true],['pKY','pSo2',true]
+].forEach(([a,b,o])=>edge(a,b,'walk',!!o));
+
+// 各エッジの素の量(距離・上下・改札)
+E.forEach(e=>{const a=N[e.a],b=N[e.b];
+  e.d=Math.hypot(a.x-b.x,a.z-b.z)*10*(e.type==='plat'?.5:1);
+  e.dv=Math.abs(fidx(a.f)-fidx(b.f)); e.gate=a.zone!==b.zone;});
+const ADJ={}; Object.keys(N).forEach(k=>ADJ[k]=[]);
+E.forEach(e=>{ADJ[e.a].push({to:e.b,e});ADJ[e.b].push({to:e.a,e});});
+
+/* ---------- 条件 ---------- */
+const cond={speed:75,rush:false,rain:false,flat:false};
+// 実際にかかる時間(分)
+function minutes(e,o){
+  // 動く歩道: 歩けば速さ+35m/分、荷物が多いときは立ったまま(約40m/分)
+  const sp=e.type==='belt'?(o.flat?40:o.speed+35):o.speed;
+  const walk=e.d/sp*(o.rush?1.3:1);
+  let vert=e.dv?(o.flat?e.dv*.6+1.0:e.dv*.5+.3):0; // 上下移動を少なく=エレベーター待ちを含む
+  if(e.dv>=3)vert+=1.2; // 総武・京葉の地下ホームはエスカレーターを何本も乗り継ぐ
+  if(o.rush&&e.dv&&!o.flat)vert*=1.5;
+  const gate=e.gate?(o.rush?1.6:1):0;
+  return walk+vert+gate;
+}
+// 探索の重み(雨の屋外・上下移動を避ける)
+function weight(e,o){
+  let w=minutes(e,o);
+  if(o.rain&&e.out)w+=e.d/o.speed*3+2;
+  if(o.flat&&e.dv)w+=e.dv*2;
+  return w;
+}
+function route(srcs,dsts,o=cond){
+  const dist={},prev={},done=new Set();
+  Object.keys(N).forEach(k=>dist[k]=Infinity);
+  srcs.forEach(s=>dist[s]=0);
+  // 出発・到着と関係ない会社の改札内は通り抜けできない
+  const zs=ids=>{const s=new Set();ids.forEach(i=>{s.add(N[i].zone);(ZEXT[N[i].zone]||[]).forEach(z=>s.add(z));});return s;};
+  const ok=new Set([...zs(srcs),...zs(dsts)]);
+  for(;;){
+    let u=null,best=Infinity;
+    for(const k in dist){if(!done.has(k)&&dist[k]<best){best=dist[k];u=k;}}
+    if(u===null)break; done.add(u);
+    for(const {to,e} of ADJ[u]){
+      if(e.gate){const zu=N[u].zone,zt=N[to].zone;if((zt!=='pub'&&!ok.has(zt))||(zu!=='pub'&&!ok.has(zu)))continue;}
+      const nd=dist[u]+weight(e,o);if(nd<dist[to]){dist[to]=nd;prev[to]={from:u,e};}}
+  }
+  let goal=null,gd=Infinity; dsts.forEach(d=>{if(dist[d]<gd){gd=dist[d];goal=d;}});
+  if(!goal)return null;
+  const path=[goal],edges=[]; let cur=goal;
+  while(prev[cur]){edges.unshift(prev[cur].e);cur=prev[cur].from;path.unshift(cur);}
+  const t=edges.reduce((s,e)=>s+minutes(e,o),0);
+  return {path,edges,t,
+    dist:edges.reduce((s,e)=>s+e.d,0), gates:edges.filter(e=>e.gate).length,
+    floors:edges.reduce((s,e)=>s+e.dv,0), outM:edges.filter(e=>e.out).reduce((s,e)=>s+e.d,0),
+    beltM:edges.filter(e=>e.type==='belt').reduce((s,e)=>s+e.d,0)};
+}
+
+/* ---------- 選択肢 ---------- */
+const OPTS=[
+ {g:'JR在来線',k:'jr12', nodes:['jr12'], name:'JR 中央線快速(新宿・立川方面)',sub:'1・2番線',ab:'中央快速 1・2',c:[C.chuo]},
+ {g:'JR在来線',k:'jr34', nodes:['jr34'], name:'JR 京浜東北線(上野・大宮方面)/山手線(上野・池袋方面)',sub:'3・4番線',ab:'京浜・山手 3・4',c:[C.keihin,C.yamanote]},
+ {g:'JR在来線',k:'jr56', nodes:['jr56'], name:'JR 山手線(品川・渋谷方面)/京浜東北線(品川・横浜方面)',sub:'5・6番線',ab:'山手・京浜 5・6',c:[C.yamanote,C.keihin]},
+ {g:'JR在来線',k:'jr78', nodes:['jr78'], name:'JR 上野東京ライン(宇都宮・高崎・常磐線方面)',sub:'7・8番線',ab:'上野東京 7・8',c:[C.tokaido]},
+ {g:'JR在来線',k:'jr910',nodes:['jr910'],name:'JR 東海道線(品川・横浜・小田原方面)',sub:'9・10番線',ab:'東海道 9・10',c:[C.tokaido]},
+ {g:'JR在来線',k:'sobu', nodes:['sobu'], name:'JR 横須賀線・総武快速線',sub:'総武地下1〜4番線',ab:'横須賀・総武 地下',c:[C.yokosuka]},
+ {g:'JR在来線',k:'keiyo',nodes:['keiyo'],name:'JR 京葉線・武蔵野線',sub:'京葉地下1〜4番線',ab:'京葉',c:[C.keiyo]},
+ {g:'新幹線',k:'je',nodes:['je2021','je2223'],name:'東北・山形・秋田・北海道・上越・北陸新幹線',sub:'20〜23番線',ab:'東北・北陸 新幹線',c:[C.tohoku]},
+ {g:'新幹線',k:'jc',nodes:['jc1415','jc1617','jc1819'],name:'東海道新幹線',sub:'14〜19番線',ab:'東海道新幹線',c:[C.tokaidoS]},
+ {g:'地下鉄',k:'m', nodes:['m'], name:'東京メトロ丸ノ内線',sub:'',ab:'丸ノ内',c:[C.maru]},
+ {g:'地下鉄',k:'tz',nodes:['tz'],name:'東京メトロ東西線(大手町駅)',sub:'徒歩連絡',ab:'東西 大手町',c:[C.tozai]},
+ {g:'出口',k:'xMN',nodes:['pMN'],name:'丸の内北口',sub:'',c:[]},
+ {g:'出口',k:'xMC',nodes:['pMC'],name:'丸の内中央口',sub:'',c:[]},
+ {g:'出口',k:'xMS',nodes:['pMS'],name:'丸の内南口',sub:'',c:[]},
+ {g:'出口',k:'xYN',nodes:['pYN'],name:'八重洲北口',sub:'',c:[]},
+ {g:'出口',k:'xYC',nodes:['pYC'],name:'八重洲中央口',sub:'',c:[]},
+ {g:'出口',k:'xYS',nodes:['pYS'],name:'八重洲南口',sub:'',c:[]},
+ {g:'出口',k:'xNB',nodes:['pNB'],name:'日本橋口',sub:'',c:[]},
+ {g:'出口',k:'xGyo',nodes:['pGyo'],name:'丸の内地下(行幸地下通路)',sub:'',c:[]},
+ {g:'出口',k:'xYB',nodes:['pYB'],name:'八重洲地下街',sub:'',c:[]},
+ {g:'出口',k:'xBus',nodes:['pBus'],name:'高速バスのりば(八重洲南口)',sub:'',c:[]},
+ {g:'出口',k:'xKM',nodes:['pKM'],name:'東京国際フォーラム・有楽町方面',sub:'',c:[]},
+];
+const OPT=Object.fromEntries(OPTS.map(o=>[o.k,o]));
+const LINES=OPTS.filter(o=>o.g!=='出口');
+const selF=document.getElementById('from'), selT=document.getElementById('to');
+[selF,selT].forEach(sel=>{
+  let grp=null,cur='';
+  OPTS.forEach(o=>{
+    if(o.g!==cur){grp=document.createElement('optgroup');grp.label=o.g;sel.appendChild(grp);cur=o.g;}
+    const op=document.createElement('option');op.value=o.k;op.textContent=o.sub?`${o.name} ${o.sub}`:o.name;grp.appendChild(op);
+  });
+});
+selF.value='jc'; selT.value='keiyo';
+
+// ヘッダーの路線カラー帯・凡例
+const LEG=[['中央線快速',C.chuo],['京浜東北線',C.keihin],['山手線',C.yamanote],['東海道線・上野東京ライン',C.tokaido],['横須賀線・総武快速線',C.yokosuka],['京葉線',C.keiyo],
+ ['東北・上越・北陸新幹線ほか',C.tohoku],['東海道新幹線',C.tokaidoS],['丸ノ内線',C.maru],['東西線',C.tozai]];
+document.getElementById('linebar').innerHTML=LEG.map(l=>`<span style="background:${l[1]}"></span>`).join('');
+document.getElementById('legend').innerHTML=LEG.map(l=>`<div><i style="background:${l[1]}"></i>${l[0]}</div>`).join('')+
+  '<div><i style="background:#f5c400"></i>出口・ルート</div><div><i style="background:#c9d3dd"></i>改札</div><div><i style="background:#3b76b0"></i>屋外の区間</div><div><i style="background:#3f8f72"></i>動く歩道</div>';
+
+/* ---------- three.js シーン ---------- */
+const app=document.getElementById('app'), canvas=document.getElementById('scene'), labelsEl=document.getElementById('labels');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene();
+scene.background=new THREE.Color('#0c1116');
+scene.fog=new THREE.Fog('#0c1116',130,260);
+const camera=new THREE.PerspectiveCamera(38,1,.5,700);
+const controls=new THREE.OrbitControls(camera,canvas);
+controls.enableDamping=true; controls.dampingFactor=.08; controls.maxDistance=210; controls.minDistance=6;
+scene.add(new THREE.HemisphereLight('#d6e6ff','#1a2028',.95));
+const sun=new THREE.DirectionalLight('#ffffff',.55); sun.position.set(30,60,25); scene.add(sun);
+
+const reg=[]; // フロア表示切替用
+const labels=[];
+function track(obj,floors,base=1){const mats=[];obj.traverse(o=>{if(o.material){o.material.transparent=true;o.material.opacity=base;mats.push(o.material);}});reg.push({mats,floors,base});return obj;}
+const V=n=>new THREE.Vector3(n.x,fy(n.f),n.z);
+const lam=c=>new THREE.MeshLambertMaterial({color:c});
+const basic=c=>new THREE.MeshBasicMaterial({color:c});
+
+// 地面(1F)のグリッド
+const grid=new THREE.GridHelper(200,100,'#1b242e','#141b23'); grid.position.y=-.45; track(grid,[1],.7); scene.add(grid);
+
+// ホーム
+const platMesh={}, platGeo={};
+const tracksForTrains=[];
+function platform(key,{x,z,f,len,w,along,colors,trainLen=18}){
+  const g=new THREE.Group(), y=fy(f);
+  const alongZ=along==='z';
+  platGeo[key]={x,z,f,len,w,alongZ};
+  const body=new THREE.Mesh(alongZ?new THREE.BoxGeometry(w,.4,len):new THREE.BoxGeometry(len,.4,w),lam('#7f8d9c'));
+  body.position.set(x,y-.2,z); g.add(body);
+  (platMesh[key]=platMesh[key]||[]).push(body);
+  [-1,1].forEach((s,i)=>{
+    const col=colors[i]||colors[0];
+    const strip=new THREE.Mesh(alongZ?new THREE.BoxGeometry(.22,.06,len):new THREE.BoxGeometry(len,.06,.22),basic(col));
+    const off=s*(w/2-.11);
+    strip.position.set(alongZ?x+off:x,y+.03,alongZ?z:z+off); g.add(strip);
+    const tl=len+16, toff=s*(w/2+.45);
+    const bed=new THREE.Mesh(alongZ?new THREE.BoxGeometry(.9,.12,tl):new THREE.BoxGeometry(tl,.12,.9),lam('#1d252e'));
+    bed.position.set(alongZ?x+toff:x,y-.55,alongZ?z:z+toff); g.add(bed);
+    tracksForTrains.push({alongZ,fixed:alongZ?x+toff:z+toff,center:alongZ?z:x,y:y-.3,color:col,len:trainLen,f});
+  });
+  scene.add(track(g,[f]));
+}
+JR.forEach(p=>platform(p.id,{x:p.x,z:(p.z0+p.z1)/2,f:p.f,len:p.z1-p.z0,w:1.4,along:'z',colors:p.c,trainLen:24}));
+SK.forEach(p=>platform(p.id,{x:p.x,z:-2,f:2,len:48,w:1.5,along:'z',colors:p.c,trainLen:34}));
+platform('sobu',{x:-23,z:0,f:-5,len:28,w:2.6,along:'z',colors:[C.yokosuka],trainLen:22});
+platform('keiyo',{x:-3,z:64,f:-4,len:22,w:3,along:'x',colors:[C.keiyo],trainLen:18});
+platform('m',{x:-28,z:-2,f:-2,len:22,w:1.8,along:'z',colors:[C.maru],trainLen:13});
+platform('tz',{x:-26,z:-44,f:-3,len:16,w:1.8,along:'x',colors:[C.tozai],trainLen:14});
+
+// 通路・階段
+function mix(hex,t){return new THREE.Color(hex).lerp(new THREE.Color('#0c1116'),t);}
+const zoneCol={jr:new THREE.Color('#34475b'),pub:new THREE.Color('#4a525e'),je:mix(C.tohoku,.62),jc:mix(C.tokaidoS,.55),m:mix(C.maru,.64),tz:mix(C.tozai,.62)};
+E.forEach(e=>{
+  if(e.type==='plat')return;
+  const A=N[e.a],B=N[e.b]; const a=V(A).add(new THREE.Vector3(0,-.06,0)), b=V(B).add(new THREE.Vector3(0,-.06,0));
+  if(a.distanceTo(b)<.01)return;
+  const stair=A.f!==B.f;
+  const col=e.out?new THREE.Color('#2f5a86'):e.type==='belt'?new THREE.Color('#3f8f72'):stair?new THREE.Color('#617286'):(A.zone===B.zone?zoneCol[A.zone]:zoneCol.pub);
+  const m=new THREE.Mesh(new THREE.BoxGeometry(stair?.45:.95,.12,a.distanceTo(b)+(stair?0:.9)),new THREE.MeshLambertMaterial({color:col}));
+  m.position.copy(a).add(b).multiplyScalar(.5); m.lookAt(b);
+  scene.add(track(m,[A.f,B.f]));
+});
+// 改札・出口のマーカー
+Object.values(N).forEach(n=>{
+  if(n.kind==='gate'){
+    const m=new THREE.Mesh(new THREE.BoxGeometry(1,.55,.3),lam('#c9d3dd')); m.position.copy(V(n)).add(new THREE.Vector3(0,.27,0));
+    scene.add(track(m,[n.f]));
+  } else if(n.kind==='exit'){
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(.22,.22,1.4,12),basic('#f5c400')); m.position.copy(V(n)).add(new THREE.Vector3(0,.7,0));
+    scene.add(track(m,[n.f]));
+  }
+});
+// 周辺ビル(ワイヤー)。赤レンガ駅舎だけ色を変える
+const BLD=[['丸の内駅舎(赤レンガ)',-19.5,-14.5,-17,17,0,4.5,'#7a4a40'],['丸ビル',-38,-30,-4,4,0,18],['新丸ビル',-38,-30,-16,-8,0,18],['KITTE',-34,-27,14,22,0,15],
+ ['グラントウキョウ ノースタワー',30,36,-25,-17,0,20],['グラントウキョウ サウスタワー',32,38,17,24,0,17],['東京ミッドタウン八重洲',38,46,4,14,0,22],['東京国際フォーラム',-34,-20,47,60,0,6]];
+BLD.forEach(([nm,x0,x1,z0,z1,y0,y1,col])=>{
+  const g=new THREE.BoxGeometry(x1-x0,y1-y0,z1-z0);
+  const l=new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:col||'#3b4958'}));
+  l.position.set((x0+x1)/2,(y0+y1)/2,(z0+z1)/2); scene.add(track(l,[1,2,3],col?.8:.55));
+  addLabel(nm,'bldg',new THREE.Vector3((x0+x1)/2,y1+.4,(z0+z1)/2),[1,2,3]);
+});
+
+// 列車(雰囲気づくり。停車→発車を繰り返す)
+const trains=[];
+tracksForTrains.forEach((t,i)=>{
+  const g=t.alongZ?new THREE.BoxGeometry(.55,.45,t.len):new THREE.BoxGeometry(t.len,.45,.55);
+  const m=new THREE.Mesh(g,new THREE.MeshLambertMaterial({color:new THREE.Color(t.color).lerp(new THREE.Color('#cfd6de'),.35),transparent:true,opacity:0}));
+  scene.add(m); trains.push({m,t,phase:(i*.137)%1,period:34+(i%5)*5,dir:i%2?1:-1});
+});
+function ease(u){return u*u*(3-2*u);}
+
+/* ---------- ラベル ---------- */
+function addLabel(html,cls,pos,floors,onClick){
+  const el=document.createElement('div'); el.className='tag '+cls; el.innerHTML=html; labelsEl.appendChild(el);
+  if(onClick){el.addEventListener('click',onClick);el.setAttribute('role','button');}
+  const L={el,pos,floors,hidden:false}; labels.push(L); return L;
+}
+const platLabels={};
+JR.forEach((p,i)=>{
+  const zEnd=i%2?p.z1+1.2:p.z0-1.2;
+  platLabels[p.id]=addLabel(`<i style="background:${p.c[0]}"></i><i style="background:${p.c[1]}"></i><b>${p.n}</b>`,'plat',new THREE.Vector3(p.x,fy(p.f)+.9,zEnd),[p.f],()=>setTo(p.id));
+});
+SK.forEach((p,i)=>{
+  const zEnd=i%2?22+1.2:-26-1.2;
+  platLabels[p.id]=addLabel(`<i style="background:${p.c[0]}"></i><b>${p.n}</b>`,'plat',new THREE.Vector3(p.x,fy(2)+.9,zEnd),[2],()=>setTo(p.zone));
+});
+[['sobu','横須賀・総武快速 地下1〜4','sobu',C.yokosuka,[-23,-17.5,-15.5]],['keiyo','京葉線 地下1〜4','keiyo',C.keiyo,[-15.5,-14,64]],
+ ['m','丸ノ内線','m',C.maru,[-28,-7,-14.5]],['tz','東西線 大手町','tz',C.tozai,[-35.5,-10.5,-44]]].forEach(([id,t,k,c,p])=>{
+  platLabels[id]=addLabel(`<i style="background:${c}"></i>${t}`,'plat',new THREE.Vector3(p[0],p[1]+.9,p[2]),[N[id].f],()=>setTo(k));
+});
+Object.values(N).forEach(n=>{
+  if(!n.show)return;
+  const cls=n.kind==='gate'?'gate':n.kind==='exit'?'exit':n.id==='bay1'?'belt':'place';
+  n.lab=addLabel(n.label,cls,V(n).add(new THREE.Vector3(0,n.kind==='exit'?1.9:.9,0)),[n.f]);
+});
+[3,2,1,-1,-2,-3,-4,-5].forEach(f=>addLabel(fl(f),'floor',new THREE.Vector3(-46,fy(f),0),'any'));
+
+/* ---------- ルート描画 ---------- */
+let routeObj=null, ants=[], routeCurve=null, pins=[], routeFrac=[];
+const antMat=new THREE.MeshBasicMaterial({color:'#ffffff',depthTest:false});
+function clearRoute(){
+  if(routeObj){scene.remove(routeObj);routeObj.traverse(o=>{o.geometry&&o.geometry.dispose();});routeObj=null;}
+  ants=[];routeCurve=null;
+  pins.forEach(p=>{p.el.remove();labels.splice(labels.indexOf(p),1);});pins=[];
+  Object.values(platMesh).flat().forEach(m=>m.material.emissive.set('#000'));
+  labels.forEach(l=>l.el.classList.remove('hot'));
+}
+// ホーム上の「この辺りで降りる/乗る」範囲
+function stopZone(stopId,g){
+  const s=N[stopId]; const pid=Object.keys(platGeo).find(k=>N[k]&&stopId.startsWith(k+'_'));
+  if(!s||!pid)return;
+  const p=platGeo[pid]; const L=Math.min(7,p.len*.45);
+  const geo=p.alongZ?new THREE.BoxGeometry(p.w+.1,.08,L):new THREE.BoxGeometry(L,.08,p.w+.1);
+  const m=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:'#f5c400',transparent:true,opacity:.55,depthWrite:false}));
+  let cz=p.alongZ?Math.min(Math.max(s.z,p.z-p.len/2+L/2),p.z+p.len/2-L/2):p.z;
+  let cx=p.alongZ?p.x:Math.min(Math.max(s.x,p.x-p.len/2+L/2),p.x+p.len/2-L/2);
+  m.position.set(cx,fy(p.f)+.06,cz); g.add(m);
+}
+function drawRoute(res,fromO,toO){
+  clearRoute();
+  const pts=res.path.map(id=>V(N[id]).add(new THREE.Vector3(0,.38,0)));
+  const cp=new THREE.CurvePath();
+  const g=new THREE.Group();
+  for(let i=1;i<pts.length;i++){if(pts[i].distanceTo(pts[i-1])>.01)cp.add(new THREE.LineCurve3(pts[i-1],pts[i]));}
+  // 各ノードが経路全体のどこにあるか(再生用)
+  let acc=0; const cum=[0]; for(let i=1;i<pts.length;i++){acc+=pts[i].distanceTo(pts[i-1]);cum.push(acc);} routeFrac=cum.map(c=>acc?c/acc:0);
+  routeCurve=cp.curves.length?cp:null;
+  if(routeCurve){
+    const seg=Math.max(80,cp.curves.length*14);
+    const tube=new THREE.Mesh(new THREE.TubeGeometry(cp,seg,.17,8,false),new THREE.MeshBasicMaterial({color:'#f5c400',depthTest:false,transparent:true,opacity:.95}));tube.renderOrder=10;g.add(tube);
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(cp,seg,.42,8,false),new THREE.MeshBasicMaterial({color:'#f5c400',transparent:true,opacity:.16,depthWrite:false})));
+    for(let i=0;i<7;i++){const s=new THREE.Mesh(new THREE.SphereGeometry(.2,12,8),antMat);s.renderOrder=11;g.add(s);ants.push(s);}
+  }
+  // 屋外区間は青いリングで示す
+  res.edges.forEach(e=>{if(!e.out)return;const m=V(N[e.a]).add(V(N[e.b])).multiplyScalar(.5).add(new THREE.Vector3(0,.4,0));
+    const r=new THREE.Mesh(new THREE.TorusGeometry(.45,.07,6,20),basic('#5aa0e6'));r.position.copy(m);r.rotation.x=Math.PI/2;g.add(r);});
+  const s=new THREE.Mesh(new THREE.TorusGeometry(.7,.12,8,24),basic('#ffffff')); s.rotation.x=Math.PI/2; s.position.copy(pts[0]); g.add(s);
+  const e=new THREE.Mesh(new THREE.ConeGeometry(.45,1.1,16),basic('#f5c400')); e.rotation.x=Math.PI; e.position.copy(pts[pts.length-1]).add(new THREE.Vector3(0,.9,0)); g.add(e);
+  // 降車・乗車位置
+  if(N[res.path[1]]&&N[res.path[1]].kind==='stop')stopZone(res.path[1],g);
+  const pl=res.path[res.path.length-2]; if(N[pl]&&N[pl].kind==='stop')stopZone(pl,g);
+  scene.add(g); routeObj=g;
+  pins.push(addLabel('出発','pin',pts[0].clone().add(new THREE.Vector3(0,1.6,0)),'any'));
+  pins.push(addLabel('到着','pin goal',pts[pts.length-1].clone().add(new THREE.Vector3(0,2.2,0)),'any'));
+  [fromO,toO].forEach(o=>o.nodes.forEach(id=>{if(res.path.includes(id)){(platMesh[id]||[]).forEach(m=>m.material.emissive.set('#3d3200'));if(platLabels[id])platLabels[id].el.classList.add('hot');}}));
+  res.path.forEach(id=>{if(N[id].lab)N[id].lab.el.classList.add('hot');});
+  return pts;
+}
+
+/* ---------- 案内文 ---------- */
+function buildSteps(res,fromO,toO){
+  const P=res.path.map(id=>N[id]); const st=[]; const used=new Set();
+  st.push({k:'start',f:P[0].f,i:0,t:`${P[0].label||fromO.name}から出発`});
+  for(let i=1;i<P.length;i++){
+    const a=P[i-1],b=P[i],last=st[st.length-1],e=res.edges[i-1];
+    if(b.f!==a.f){
+      const up=fidx(b.f)>fidx(a.f);
+      const how=cond.flat?'エレベーター':'階段・エスカレーター';
+      if(last.k==='move'){const u2=fidx(b.f)>fidx(last.from);last.f=b.f;last.t=`${how}で${fl(b.f)}へ${u2?'上がる':'下りる'}`;}
+      else st.push({k:'move',from:a.f,f:b.f,i,t:`${how}で${fl(b.f)}へ${up?'上がる':'下りる'}`});
+    }
+    if(e&&e.out){const l=st[st.length-1];if(!l.out){l.out=true;}}
+    if(e&&e.type==='belt')st[st.length-1].belt=true;
+    if(i===P.length-1)break;
+    const nx=P[i+1];
+    if(b.kind==='gate'){
+      if(a.kind==='gate'&&a.zone!==b.zone){last.k='gate';last.t=`乗換改札を通って${ZONE_NAME[b.zone]}へ`;last.tip=b.tip||last.tip;continue;}
+      let t;
+      if(nx.zone==='pub')t=`${b.label}を出る`;
+      else if(a.zone==='pub')t=`${b.label}から入る`;
+      else if(nx.kind==='gate')t=`${b.label}へ進む`;
+      else t=`${b.label}を通る`;
+      st.push({k:'gate',f:b.f,i,t,tip:b.tip});
+    } else if(b.label && b.kind!=='plat' && b.kind!=='stop' && !used.has(b.label)){
+      used.add(b.label);
+      st.push({k:'walk',f:b.f,i,t:b.kind==='exit'?`${b.label}の前を通る`:`${b.label}を進む`,tip:b.tip});
+    }
+  }
+  const g=P[P.length-1];
+  st.push({k:'goal',f:g.f,i:P.length-1,t:`${g.kind==='plat'?g.label:toO.name}に到着`,tip:g.tip});
+  return st.filter((s,i)=>i===0||s.t!==st[i-1].t);
+}
+
+const tminEl=document.getElementById('tmin'),tdiffEl=document.getElementById('tdiff'),factsEl=document.getElementById('facts'),stepsEl=document.getElementById('steps'),posEl=document.getElementById('pos');
+let lastPts=null, lastRes=null, lastSteps=[];
+function update(fly=true){
+  stopPlay();
+  const fo=OPT[selF.value],to=OPT[selT.value];
+  if(fo.k===to.k){
+    clearRoute(); lastPts=null; lastRes=null; tminEl.textContent='0'; tdiffEl.hidden=true; posEl.hidden=true;
+    factsEl.innerHTML='<span>出発と到着が同じです</span>'; stepsEl.innerHTML='';
+    applyFloor(); renderCheck(); markMatrix(); return;
+  }
+  const res=route(fo.nodes,to.nodes);
+  if(!res){tminEl.textContent='–';stepsEl.innerHTML='<li><span></span><span>ルートが見つかりませんでした。別の組み合わせを選んでください。</span></li>';return;}
+  lastRes=res;
+  tminEl.textContent=Math.max(1,Math.round(res.t));
+  // 条件付きのときは、条件なしの最短との差を出す
+  const plain={speed:cond.speed,rush:cond.rush,rain:false,flat:false};
+  if(cond.rain||cond.flat){
+    const b=route(fo.nodes,to.nodes,plain); const d=Math.round(res.t)-Math.round(b.t);
+    const why=[cond.rain?'屋外を避けた':'',cond.flat?'上下移動を減らした':''].filter(Boolean).join('・');
+    tdiffEl.hidden=false; tdiffEl.textContent=b.path.join()===res.path.join()?`${why}ルートでも同じ道`:`${why}ため 最短より${d>=0?'+':''}${d}分`;
+  } else tdiffEl.hidden=true;
+  factsEl.innerHTML=`<span>歩く距離 約${Math.round(res.dist/10)*10}m</span><span>改札 ${res.gates}回</span><span>上下移動 ${res.floors}フロア分</span>`+
+    (res.outM>0?`<span style="border-color:#3b76b0;color:#cfe4ff">屋外 約${Math.round(res.outM/10)*10}m</span>`:`<span>屋根の下だけで行ける</span>`)+
+    (res.beltM>0?`<span style="border-color:#3f8f72;color:#c9f0df">うち動く歩道 約${Math.round(res.beltM/10)*10}m</span>`:'');
+  // 降車位置・乗車位置
+  const first=res.path[1], lastStop=res.path[res.path.length-2];
+  let pos='';
+  if(N[first]&&N[first].kind==='stop'&&stopInfo[first])pos+=`<dt>降りたら</dt><dd>ホームの<b>${stopInfo[first]}</b>の階段が近い。乗る車両もこのあたりがおすすめ</dd>`;
+  if(N[lastStop]&&N[lastStop].kind==='stop'&&stopInfo[lastStop])pos+=`<dt>乗り場</dt><dd>ホームの<b>${stopInfo[lastStop]}</b>に出る</dd>`;
+  posEl.innerHTML=pos; posEl.hidden=!pos;
+  lastSteps=buildSteps(res,fo,to);
+  stepsEl.innerHTML=lastSteps.map((s,j)=>`<li class="${s.k}" data-j="${j}"><span class="fl">${fl(s.f)}</span><span>${s.t}${s.out?'<span class="out">屋外</span>':''}${s.belt?'<span class="out belt">動く歩道</span>':''}${s.tip?`<span class="tip">${s.tip}</span>`:''}</span></li>`).join('');
+  lastPts=drawRoute(res,fo,to);
+  applyFloor(); renderCheck(); markMatrix();
+  if(fly)frame('route');
+}
+
+function setTo(k){selT.value=k;update();}
+selF.addEventListener('change',()=>update()); selT.addEventListener('change',()=>update());
+document.getElementById('swap').addEventListener('click',()=>{const a=selF.value;selF.value=selT.value;selT.value=a;update();});
+
+/* ---------- 条件の切替 ---------- */
+document.querySelectorAll('#speed button').forEach(b=>b.addEventListener('click',()=>{
+  cond.speed=+b.dataset.v; document.querySelectorAll('#speed button').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  update(false); renderMatrix();
+}));
+[['c-rush','rush'],['c-rain','rain'],['c-flat','flat']].forEach(([id,k])=>{
+  const b=document.getElementById(id);
+  b.addEventListener('click',()=>{cond[k]=!cond[k];b.setAttribute('aria-pressed',cond[k]);update(false);renderMatrix();});
+});
+
+/* ---------- 乗り継ぎ判定 ---------- */
+const arrEl=document.getElementById('arr'),depEl=document.getElementById('dep'),verdictEl=document.getElementById('verdict'),barEl=document.getElementById('bar');
+const toMin=v=>{const [h,m]=v.split(':').map(Number);return h*60+m;};
+function renderCheck(){
+  if(!arrEl.value||!depEl.value){verdictEl.className='verdict';verdictEl.innerHTML='<p>時刻を2つとも入れてください。</p>';barEl.innerHTML='';return;}
+  if(!lastRes){verdictEl.className='verdict';verdictEl.innerHTML='<p>出発と到着に別の路線を選んでください。</p>';barEl.innerHTML='';return;}
+  let gap=toMin(depEl.value)-toMin(arrEl.value); if(gap<0)gap+=1440;
+  const alight=cond.rush?2:1, walk=Math.max(1,Math.round(lastRes.t)), board=1;
+  const need=alight+walk+board, spare=gap-need;
+  let cls,label,msg;
+  if(spare>=4){cls='ok';label='間に合う';msg=`${gap}分あるので、${spare}分の余裕があります。`;}
+  else if(spare>=0){cls='warn';label='ぎりぎり';msg=`余裕は${spare}分。降りたらすぐ移動しましょう。`+(N[lastRes.path[1]]&&stopInfo[lastRes.path[1]]?`ホームの${stopInfo[lastRes.path[1]]}の車両に乗っておくと近道です。`:'');}
+  else {cls='bad';label='間に合わない可能性大';msg=`${-spare}分足りません。1本あとの列車を選ぶか、条件を見直してください。`;}
+  if(cond.flat&&cls!=='bad')msg+=' エレベーターが混んでいると待つことがあります。';
+  verdictEl.className='verdict '+cls;
+  verdictEl.innerHTML=`<span class="pill">${label}</span><span class="big">${spare>=0?'余裕 '+spare:'不足 '+(-spare)} 分</span><p>${msg}</p><p class="note">持ち時間 ${gap}分 = 降車 ${alight}分 + 歩く ${walk}分 + 発車前 ${board}分 ${spare>=0?'+ 余裕 '+spare+'分':''}</p>`;
+  const total=Math.max(gap,need);
+  const seg=(v,c)=>`<span style="width:${(v/total*100).toFixed(1)}%;background:${c}"></span>`;
+  barEl.innerHTML=seg(alight,'#6b7a8a')+seg(walk,'#f5c400')+seg(board,'#6b7a8a')+(spare>=0?seg(spare,'#3fbf7f'):seg(-spare,'#e5484d'));
+}
+[arrEl,depEl].forEach(el=>el.addEventListener('input',renderCheck));
+
+/* ---------- 乗換時間表 ---------- */
+const mxEl=document.getElementById('mx'),rankEl=document.getElementById('rank');
+const BINS=[[3,'#1f3440','#d7e3ec'],[6,'#27506a','#e8f0f6'],[9,'#3a7598','#fff'],[12,'#e0a33a','#1b1200'],[99,'#f06a3a','#1b0800']];
+const binOf=t=>BINS.find(b=>t<=b[0]);
+document.getElementById('scale').innerHTML='短い'+BINS.map((b,i)=>`<span style="background:${b[1]}" title="${i?BINS[i-1][0]+1:0}〜${b[0]===99?'':b[0]}分"></span>`).join('')+'長い <span style="width:auto;margin-left:8px">(3分・6分・9分・12分で区切り)</span>';
+function renderMatrix(){
+  const T={}; const all=[];
+  LINES.forEach(a=>{T[a.k]={};LINES.forEach(b=>{if(a.k===b.k)return;const r=route(a.nodes,b.nodes);const t=Math.max(1,Math.round(r.t));T[a.k][b.k]=t;all.push({a,b,t});});});
+  const sw=o=>o.c.map(c=>`<span style="background:${c}"></span>`).join('');
+  let h='<thead><tr><th><span style="width:0"></span></th>'+LINES.map(b=>`<th scope="col" title="${b.name}">${sw(b)}${b.ab}</th>`).join('')+'</tr></thead><tbody>';
+  LINES.forEach(a=>{
+    h+=`<tr><th scope="row" title="${a.name}">${sw(a)}${a.ab}</th>`;
+    LINES.forEach(b=>{
+      if(a.k===b.k){h+='<td class="self">·</td>';return;}
+      const t=T[a.k][b.k],bn=binOf(t);
+      h+=`<td data-f="${a.k}" data-t="${b.k}" style="background:${bn[1]};color:${bn[2]}" title="${a.name} → ${b.name}:約${t}分" tabindex="0">${t}</td>`;
+    });
+    h+='</tr>';
+  });
+  mxEl.innerHTML=h+'</tbody>';
+  // 時間のかかる組み合わせ(同じ組の往復は1つにまとめる)
+  const seen=new Set(); const top=all.sort((x,y)=>y.t-x.t).filter(r=>{const k=[r.a.k,r.b.k].sort().join();if(seen.has(k))return false;seen.add(k);return true;}).slice(0,5);
+  rankEl.innerHTML=top.map(r=>`<li><b>${r.t}分</b><button data-f="${r.a.k}" data-t="${r.b.k}">${r.a.ab} → ${r.b.ab}</button></li>`).join('');
+  markMatrix();
+}
+function markMatrix(){mxEl.querySelectorAll('td.sel').forEach(td=>td.classList.remove('sel'));const td=mxEl.querySelector(`td[data-f="${selF.value}"][data-t="${selT.value}"]`);if(td)td.classList.add('sel');}
+function pick(el){if(!el||!el.dataset.f)return;selF.value=el.dataset.f;selT.value=el.dataset.t;update();}
+mxEl.addEventListener('click',e=>pick(e.target.closest('td')));
+mxEl.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick(e.target.closest('td'));}});
+rankEl.addEventListener('click',e=>pick(e.target.closest('button')));
+
+/* ---------- タブ ---------- */
+const panel=document.getElementById('panel');
+const TABS=[['t-route','p-route'],['t-check','p-check'],['t-mx','p-mx']];
+TABS.forEach(([t,p])=>document.getElementById(t).addEventListener('click',()=>{
+  TABS.forEach(([t2,p2])=>{const on=t2===t;document.getElementById(t2).setAttribute('aria-selected',on);document.getElementById(p2).hidden=!on;document.getElementById(p2).classList.toggle('keep',on);});
+  panel.classList.toggle('wide',t==='t-mx');
+  if(t==='t-mx')renderMatrix();
+  resize();
+}));
+
+/* ---------- フロア表示 ---------- */
+let floorMode='all';
+const inMode=f=>floorMode==='all'||(floorMode==='up'&&f>=2)||(floorMode==='g'&&f===1)||(floorMode==='b1'&&f===-1)||(floorMode==='deep'&&f<=-2);
+function applyFloor(){
+  reg.forEach(r=>{const on=r.floors.some(inMode);r.mats.forEach(m=>m.opacity=on?r.base:r.base*.1);});
+  labels.forEach(l=>{l.hidden=l.floors!=='any'&&!l.floors.some(inMode);});
+}
+document.querySelectorAll('#floors .chip').forEach(b=>b.addEventListener('click',()=>{
+  floorMode=b.dataset.f;
+  document.querySelectorAll('#floors .chip').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));
+  applyFloor();
+}));
+const gateChip=document.getElementById('gatechip');
+gateChip.addEventListener('click',()=>{const on=gateChip.getAttribute('aria-pressed')!=='true';gateChip.setAttribute('aria-pressed',on);labelsEl.classList.toggle('hide-gates',!on);});
+if(app.clientWidth<=760)gateChip.click(); // スマホでは改札名が重なるので最初は隠す
+
+/* ---------- カメラ ---------- */
+let tween=null;
+function flyTo(pos,target,ms=900){
+  if(reduce)ms=0;
+  tween={p0:camera.position.clone(),t0:controls.target.clone(),p1:pos,t1:target,s:performance.now(),ms};
+}
+function frame(v){
+  stopPlay();
+  if(v==='overview')return flyTo(new THREE.Vector3(62,50,78),new THREE.Vector3(-2,-6,8));
+  if(v==='top')return flyTo(new THREE.Vector3(0,135,8.01),new THREE.Vector3(0,0,8));
+  if(v==='under')return flyTo(new THREE.Vector3(46,-46,64),new THREE.Vector3(-4,-8,8));
+  if(v==='route'&&lastPts){
+    const box=new THREE.Box3().setFromPoints(lastPts); const c=box.getCenter(new THREE.Vector3()); const sz=box.getSize(new THREE.Vector3());
+    const r=Math.max(sz.x,sz.z,sz.y*1.3,10);
+    const dir=new THREE.Vector3(.62,.68,.78).normalize();
+    const k=app.clientWidth>760?1:app.clientWidth/app.clientHeight<.7?1.9:1.4; // 縦長の画面では引いて全体を入れる
+    flyTo(c.clone().add(dir.multiplyScalar((r*1.25+14)*k)),c);
+  }
+}
+document.querySelectorAll('#views .chip[data-v]').forEach(b=>b.addEventListener('click',()=>frame(b.dataset.v)));
+
+/* ---------- ルート再生 ---------- */
+const playBtn=document.getElementById('play');
+let play=null; const back=new THREE.Vector3(-1,0,0);
+function startPlay(){
+  if(!routeCurve)return;
+  tween=null;
+  const len=routeCurve.getLength();
+  play={s:performance.now(),dur:Math.min(28000,Math.max(9000,len*230)),cur:-1};
+  controls.enabled=false; playBtn.textContent='■ 停止';
+}
+function stopPlay(){
+  if(!play)return; play=null; controls.enabled=true; playBtn.textContent='▶ ルートを再生';
+  stepsEl.querySelectorAll('li.cur').forEach(li=>li.classList.remove('cur'));
+}
+playBtn.addEventListener('click',()=>{if(play){stopPlay();}else startPlay();});
+if(reduce){playBtn.disabled=true;playBtn.title='動きを減らす設定のため再生できません';}
+function playStep(u){
+  const p=routeCurve.getPointAt(u), ahead=routeCurve.getPointAt(Math.min(1,u+.03));
+  const d=ahead.clone().sub(p); d.y=0;
+  if(d.lengthSq()>1e-4)back.lerp(d.normalize().negate(),.06).normalize();
+  const want=p.clone().add(back.clone().multiplyScalar(9)).add(new THREE.Vector3(0,6.5,0));
+  camera.position.lerp(want,.07); controls.target.lerp(p,.12);
+  // 今どの手順か
+  let idx=0; for(let i=0;i<routeFrac.length;i++){if(routeFrac[i]<=u)idx=i;}
+  let j=0; lastSteps.forEach((s,k)=>{if(s.i<=idx)j=k;});
+  if(j!==play.cur){play.cur=j;stepsEl.querySelectorAll('li').forEach(li=>li.classList.toggle('cur',+li.dataset.j===j));
+    const li=stepsEl.querySelector(`li[data-j="${j}"]`); if(li)li.scrollIntoView({block:'nearest'});}
+}
+
+/* ---------- パネル(スマホでたたむ) ---------- */
+const minbtn=document.getElementById('minbtn');
+minbtn.addEventListener('click',()=>{const m=panel.classList.toggle('min');minbtn.textContent=m?'ひらく':'たたむ';minbtn.setAttribute('aria-expanded',!m);resize();});
+
+/* ---------- サイズ ---------- */
+function resize(){
+  const w=app.clientWidth,h=app.clientHeight;
+  renderer.setSize(w,h,false); camera.aspect=w/h;
+  // パネルの分だけ視野の中心をずらす
+  const shift=w>760?Math.min(270,panel.offsetWidth/2+8):0;
+  const hshift=w>760?0:Math.min(h*.24,panel.offsetHeight/2);
+  if(shift||hshift)camera.setViewOffset(w,h,-shift,hshift,w,h); else camera.clearViewOffset();
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(app);
+resize();
+
+/* ---------- ループ ---------- */
+const needle=document.getElementById('needle');
+const tmp=new THREE.Vector3();
+function loop(now){
+  requestAnimationFrame(loop);
+  if(tween){
+    const u=tween.ms?Math.min(1,(now-tween.s)/tween.ms):1, k=ease(u);
+    camera.position.lerpVectors(tween.p0,tween.p1,k); controls.target.lerpVectors(tween.t0,tween.t1,k);
+    if(u>=1)tween=null;
+  }
+  if(play&&routeCurve){
+    const u=(now-play.s)/play.dur;
+    if(u>=1){stopPlay();frame('route');} else playStep(Math.max(0,u));
+  }
+  controls.update();
+  const t=now/1000;
+  // 列車
+  trains.forEach(tr=>{
+    if(reduce){tr.m.visible=false;return;}
+    const s=((t/tr.period)+tr.phase)%1; let off,vis=true;
+    if(s<.28)off=-(1-ease(s/.28))*55; else if(s<.55)off=0; else if(s<.8)off=ease((s-.55)/.25)*55; else vis=false;
+    off*=tr.dir; tr.m.visible=vis;
+    const c=tr.t.center+off;
+    if(tr.t.alongZ)tr.m.position.set(tr.t.fixed,tr.t.y,c); else tr.m.position.set(c,tr.t.y,tr.t.fixed);
+    const on=inMode(tr.t.f);
+    tr.m.material.opacity=(on?.42:.05)*Math.max(0,1-Math.max(0,Math.abs(off)-12)/34);
+  });
+  // ルート上を流れる点
+  if(routeCurve&&ants.length){
+    ants.forEach((a,i)=>{const u=reduce?i/ants.length:((t*.09)+i/ants.length)%1;a.position.copy(routeCurve.getPointAt(u));});
+  }
+  renderer.render(scene,camera);
+  // ラベル
+  const w=app.clientWidth,h=app.clientHeight;
+  labels.forEach(l=>{
+    tmp.copy(l.pos).project(camera);
+    const off=tmp.z>1||tmp.z<-1||l.hidden;
+    if(off){if(l.el.style.display!=='none')l.el.style.display='none';return;}
+    if(l.el.style.display==='none')l.el.style.display='';
+    const x=(tmp.x*.5+.5)*w, y=(-tmp.y*.5+.5)*h;
+    l.el.style.transform=`translate(${x.toFixed(1)}px,${y.toFixed(1)}px) translate(-50%,-100%)`;
+  });
+  needle.style.transform=`rotate(${(-controls.getAzimuthalAngle()*180/Math.PI).toFixed(1)}deg)`;
+}
+camera.position.set(62,50,78); controls.target.set(-2,-6,8);
+update(false);
+frame('route');
+requestAnimationFrame(loop);
+})();
+</script>
+
+</body>
+</html>
